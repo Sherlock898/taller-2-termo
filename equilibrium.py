@@ -97,15 +97,16 @@ def _vle_OF_NRTL_virial(sol, fixed, z, fn_psats, nrtl_params, virial_params, sol
 
 
 def Ty_bub_NRTL(P, x, fn_psats, nrtl_params, T_bounds=(280, 400)):
-    T = brentq(_bubble_OF_NRTL, T_bounds[0], T_bounds[1], args=(P, fn_psats, x, nrtl_params))
+    T = brentq(_bubble_OF_NRTL, T_bounds[0], T_bounds[1], args=(P, x, fn_psats, nrtl_params))
     gammas = gamma_NRTL(T, x, *nrtl_params)
     y = x * gammas * fn_psats(T) / P
     return T, y
 
-def Py_bub_NRTL(T, x, fn_psats, nrtl_params, P_bounds=(0, 10)):
-    P = brentq(_bubble_OF_NRTL, P_bounds[0], P_bounds[1], args=(T, fn_psats, x, nrtl_params))
+def Py_bub_NRTL(T, x, fn_psats, nrtl_params):
     gammas = gamma_NRTL(T, x, *nrtl_params)
-    y = x*gammas*fn_psats(T)/P
+    Psats = fn_psats(T)
+    P = np.sum(x * gammas * Psats)
+    y = x * gammas * Psats / P
     return P, y
 
 def Tx_dew_NRTL(P, y, fn_psats, nrtl_params, T_guess=350):
@@ -160,7 +161,7 @@ def Tx_dew_NRTL_virial(P, y, fn_psats, nrtl_params, virial_params, T_guess=350):
         raise ValueError("Non physical solution")
     return T, x
 
-def Py_bub(T, x, fn_psats, nrtl_params, virial_params, P_guess=1.0):
+def Py_bub_NRTL_virial(T, x, fn_psats, nrtl_params, virial_params, P_guess=1.0):
     x = np.asarray(x, dtype=float)
     guess = np.r_[P_guess, x[:-1]]
 
@@ -175,7 +176,7 @@ def Py_bub(T, x, fn_psats, nrtl_params, virial_params, P_guess=1.0):
     return P, y
     
 
-def Px_bub(T, y, fn_psats, nrtl_params, virial_params, P_guess=1.0):
+def Px_dew_NRTL_virial(T, y, fn_psats, nrtl_params, virial_params, P_guess=1.0):
     y = np.asarray(y, dtype=float)
     guess = np.r_[P_guess, y[:-1]]
 
@@ -188,3 +189,32 @@ def Px_bub(T, y, fn_psats, nrtl_params, virial_params, P_guess=1.0):
     if P <= 0 or np.any(x < 0) or np.any(x > 1):
         raise ValueError("Non physical solution")
     return P, x
+
+
+def Txy_data(P, fn_psats, nrtl_params, virial_params=None, num_points=100):
+    x1 = np.linspace(1e-6, 1-1e-6, num_points)
+    y1 = np.zeros(num_points)
+    T = np.zeros(num_points)
+    for i, xi in enumerate(x1):
+        x = np.array([xi, 1-xi])
+        if virial_params is None:
+            Ti, yi = Ty_bub_NRTL(P, x, fn_psats, nrtl_params)
+        else:
+            Ti, yi = Ty_bub_NRTL_virial(P, x, fn_psats, nrtl_params, virial_params)
+        T[i] = Ti
+        y1[i] = yi[0]
+    return T, x1, y1
+
+def Pxy_data(T, fn_psats, nrtl_params, virial_params=None, num_points=100):
+    x1 = np.linspace(1e-6, 1 - 1e-6, num_points)
+    y1 = np.linspace(num_points)
+    P = np.linspace(num_points)
+    for i, yi in enumerate(x1):
+        x = np.array([x1, 1-x1])
+        if virial_params is None:
+            Pi, yi = Py_bub_NRTL(T, x, fn_psats, nrtl_params)
+        else:
+            Pi, yi = Py_bub_NRTL_virial(T, x, fn_psats, nrtl_params, virial_params)
+        P[i] = Pi
+        y1[i] = yi[0]
+    return P, x1, y1
